@@ -1,0 +1,71 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vhdStorageUri": {
+            "type": "string",
+            "metadata": {
+                "descritpion": "Location of the vhd that will be used for this VM Scale Set"
+            }
+        },
+        "buildId" : {
+            "type": "string",
+            "metadata": {
+                "descritpion": "Build Id used to create Image"
+            }
+        }
+    },
+    "variables": {
+        "vmImageName": "[concat( 'WK2016.', uniqueString(resourceGroup().id, deployment().name) )]",
+        "galleryName": "BjdAzureDemoGallery",
+        "offer": "BaseIISStandard",
+        "version": "[concat( '1.0.', parameters('buildId') )]",
+        "replica": 1
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Compute/images",
+            "name": "[variables('vmImageName')]",
+            "apiVersion": "2016-04-30-preview",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "storageProfile": {
+                    "osDisk": {
+                        "osType": "Windows",
+                        "osState": "Generalized",
+                        "blobUri": "[parameters('vhdStorageUri')]",
+                        "storageAccountType": "Premium_LRS"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/galleries/images/versions",
+            "name": "[concat(variables('galleryName'), '/', variables('offer'), '/', variables('version'))]",
+            "apiVersion": "2018-06-01",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[variables('vmImageName')]"
+            ],
+            "tags": {
+                "buildId": "[variables('version')]",
+                "type": "Windows 2016 with IIS and ASP.NET"
+            },
+            "properties": {
+                "publishingProfile": {
+                    "replicaCount": "[variables('replica')]",
+                    "targetRegions": [
+                        {"name": "eastus2"},
+                        {"name": "southcentralus"},
+                        {"name": "westcentralus"}
+                    ],
+                    "source": {
+                        "managedImage": {
+                            "id": "[resourceId('Microsoft.Compute/images',variables('vmImageName'))]"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
