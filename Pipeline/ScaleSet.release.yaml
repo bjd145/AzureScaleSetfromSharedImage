@@ -1,0 +1,49 @@
+pool:
+  vmImage: Hosted VS2017
+  
+variables:
+  InstallScriptUri: ''
+  InstallScriptName: 'post_build_script.ps1'
+  SharedImageResourceGroup: 'Core_Infra_VMTemplates_RG'
+  SharedImageGallery: 'BjdAzureDemoGallery'
+  SharedImageGalleryImageName: 'BaseIISStandard'
+  VMSSResourceGroup: ''
+  SharedImageResourceId: ''
+
+steps:
+- task: AzureFileCopy@1
+  displayName: 'AzureBlob File Copy'
+  inputs:
+    SourcePath: '$(System.DefaultWorkingDirectory)/Drop/drop/Scripts/post_build_script.ps1'
+    azureSubscription: 'Azure'
+    Destination: AzureBlob
+    storage: bjdcoresa001
+    ContainerName: scripts
+    outputStorageUri: InstallScriptUri
+
+- task: AzureCLI@1
+  displayName: 'Get Shared Image Id'
+  inputs:
+    azureSubscription: 'Azure'
+    scriptLocation: inlineScript
+    inlineScript: |
+     for /F "tokens=*" %%a IN ('az sig image-version list -g $(SharedImageResourceGroup) -r $(SharedImageGallery) -i $(SharedImageGalleryImageName) --query "[*].id |  [-1]"') do (call SET image_id=%%a)    
+     call echo ##vso[task.setvariable variable=SharedImageResourceId]%image_id%
+
+- powershell: |
+   $RGName = "VMScaleSetTest_{0}" -f $(Get-Date).ToString("yyyyMMdd")
+   Write-Host "##vso[task.setvariable variable=VMSSResourceGroup]$RGName"
+   
+   $scriptUri = "{0}/{1}" -f "$(InstallScriptUri)", "$(InstallScriptName)"
+   Write-Host "##vso[task.setvariable variable=InstallScriptUri]$scriptUri"  
+  displayName: 'PowerShell Script - Set Variables'
+
+- task: AzureResourceGroupDeployment@2
+  displayName: 'Azure Deployment - Create VM Scale Set'
+  inputs:
+    azureSubscription: 'BJD_APP01_Subscription'
+    resourceGroupName: '$(VMSSResourceGroup)'
+    location: 'South Central US'
+    csmFile: '$(System.DefaultWorkingDirectory)/Drop/drop/ScaleSetTemplate/azuredeploy.json'
+    csmParametersFile: '$(System.DefaultWorkingDirectory)/Drop/drop/ScaleSetTemplate/azuredeploy.parameters.json'
+    overrideParameters: ' -adminPassword $(managerPassword) -scriptExtensionUri "$(InstallScriptUri)" -vmsharedImageId $(SharedImageResourceId)'

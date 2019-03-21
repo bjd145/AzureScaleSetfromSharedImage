@@ -1,0 +1,32 @@
+pool:
+  vmImage: Hosted VS2017
+  
+variables:
+  VHDStorageUri: ''
+
+steps:
+- task: PackerBuild@0
+  displayName: 'Build Golden Image'
+  inputs:
+    ConnectedServiceName: 'Microsoft Azure Internal Consumption (2deb88fe-eca8-499a-adb9-6e0ea8b6c1d2)'
+    location: southcentralus
+    storageAccountName: bjdtemplates001
+    azureResourceGroup: 'Core_Infra_VMTemplates_RG'
+    baseImage: 'MicrosoftWindowsServer:WindowsServer:2016-Datacenter:windows'
+    packagePath: '$(System.DefaultWorkingDirectory)/Drop/drop/Scripts'
+    deployScriptPath: ' install_and_config_iis10.ps1'
+    imageUri: VHDStorageUri
+
+- powershell: |
+   $RGName = "Core_Infra_VMTemplates_RG"
+   Write-Host "##vso[task.setvariable variable=ResourceGroupName]$RGName"
+  displayName: 'PowerShell Script'
+
+- task: AzureResourceGroupDeployment@2
+  displayName: 'Publish Image Multi-regions'
+  inputs:
+    azureSubscription: Azure'
+    resourceGroupName: '$(ResourceGroupName)'
+    location: 'South Central US'
+    csmFile: '$(System.DefaultWorkingDirectory)/Drop/drop/SharedImageGalleryTemplate/azuredeploy.json'
+    overrideParameters: '-vhdStorageUri $(VHDStorageUri) -buildId $(Release.ReleaseId)'

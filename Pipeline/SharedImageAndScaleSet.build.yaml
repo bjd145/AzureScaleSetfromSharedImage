@@ -1,0 +1,11 @@
+pool:
+  vmImage: Hosted VS2017
+steps:
+- task: CopyFiles@2
+  displayName: 'Copy Source Folder '
+  inputs:
+    SourceFolder: Source
+    TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifacts: drop'
