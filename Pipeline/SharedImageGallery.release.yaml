@@ -8,7 +8,7 @@ steps:
 - task: PackerBuild@0
   displayName: 'Build Golden Image'
   inputs:
-    ConnectedServiceName: 'Microsoft Azure Internal Consumption (2deb88fe-eca8-499a-adb9-6e0ea8b6c1d2)'
+    ConnectedServiceName: 'BJD_Core_Subscription'
     location: southcentralus
     storageAccountName: bjdtemplates001
     azureResourceGroup: 'Core_Infra_VMTemplates_RG'
@@ -25,7 +25,7 @@ steps:
 - task: AzureResourceGroupDeployment@2
   displayName: 'Publish Image Multi-regions'
   inputs:
-    azureSubscription: Azure'
+    azureSubscription: 'BJD_Core_Subscription'
     resourceGroupName: '$(ResourceGroupName)'
     location: 'South Central US'
     csmFile: '$(System.DefaultWorkingDirectory)/Drop/drop/SharedImageGalleryTemplate/azuredeploy.json'
