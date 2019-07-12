@@ -21,11 +21,23 @@
                 "description": "Administrator password"
             }
         },
-        "scriptExtensionUri":  {
+        "vnetResourceGroupName": {
             "type": "string",
             "metadata": {
-                "description": "Path to Custom Script Extension"
-            }
+                "description": "Resource Group Name where Virtual Network lives"
+            }         
+        },
+        "vnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Virtual Name"
+            }         
+        },
+        "subnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the subnet in the Vnet to deploy the VMSS"
+            }         
         }
     },
     "variables": {
@@ -34,20 +46,110 @@
         "loadBalancerBackEndName": "loadBalancerBackEnd",
         "loadBalancerProbeName": "loadBalancerHttpProbe",
         "loadBalancerNatPoolName": "loadBalancerNatPool",
-        "vnetSubnetId": "/subscriptions/{sub.Id}/resourceGroups/{rg.Name}/providers/Microsoft.Network/virtualNetworks/{vnet.Name}/subnets/{subnet.Name}",
         "vmSku": "Standard_F2s_v2",
         "adminUsername": "manager",
+        "asgName": "WebServers",
+        "nsgName": "vmss-nsg-001",
         "instances": 5,
-        "scriptName": "[last(split(parameters('scriptExtensionUri'),'/'))]"
+        "vnetSubnetId": "[concat('/subscriptions/', subscription().id, '/resourceGroups/', parameters('vnetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('vnetName'), '/subnets/', parameters('subnetName'))]",
     },
     "resources": [
+        {
+            "apiVersion": "2017-10-01",
+            "type": "Microsoft.Network/applicationSecurityGroups",
+            "name": "[variables('asgName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {}
+        },
+        {
+            "apiVersion": "2017-10-01",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "name": "[variables('nsgName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/applicationSecurityGroups/', variables('asgName'))]"
+            ],
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "HTTP-80",
+                        "properties": {
+                            "description": "HTTP 80",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "80",
+                            "sourceAddressPrefix": "Internet",
+                            "destinationApplicationSecurityGroups": [
+                                {
+                                    "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
+                                }
+                            ],
+                            "access": "Allow",
+                            "priority": 100,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "apiVersion": "2017-10-01",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "name": "[variables('nsgName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/applicationSecurityGroups/', variables('asgName'))]"
+            ],
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "HTTP-80",
+                        "properties": {
+                            "description": "HTTP 80",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "80",
+                            "sourceAddressPrefix": "*",
+                            "destinationApplicationSecurityGroups": [
+                                {
+                                    "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
+                                }
+                            ],
+                            "access": "Allow",
+                            "priority": 100,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "RDP-3389",
+                        "properties": {
+                            "description": "RDP 3389 80",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "3389",
+                            "sourceAddressPrefix": "*",
+                            "destinationApplicationSecurityGroups": [
+                                {
+                                    "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
+                                }
+                            ],
+                            "access": "Allow",
+                            "priority": 100,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            }
+        },
         {
             "type": "Microsoft.Compute/virtualMachineScaleSets",
             "name": "[parameters('vmssName')]",
             "location": "[resourceGroup().location]",
             "apiVersion": "2018-10-01",
             "dependsOn": [
-                "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
+                "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]",
+                "[resourceId('Microsoft.Network/applicationSecurityGroups/', variables('asgName'))]",
+                "[resourceId('Microsoft.Network/networkSecurityGroups/', variables('nsgName'))]"
             ],
             "sku": {
                 "name": "[variables('vmSku')]",
@@ -68,23 +170,7 @@
                         "imageReference": {
                             "id": "[parameters('vmsharedImageId')]"
                         }
-                    },
-                    "extensionProfile": {
-                        "extensions": [
-                            {
-                                "name": "Microsoft.Compute.Extensions",
-                                "properties": {
-                                    "publisher": "Microsoft.Compute",
-                                    "type": "CustomScriptExtension",
-                                    "typeHandlerVersion": "1.2",
-                                    "settings": {
-                                        "fileUris": [ "[parameters('scriptExtensionUri')]" ],
-                                        "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -file ', variables('scriptName'))]"
-                                    }
-                                }
-                            }
-                        ]
-                    },                   
+                    },                 
                     "networkProfile": {
                         "networkInterfaceConfigurations": [
                             {
@@ -98,6 +184,11 @@
                                                 "subnet": {
                                                     "id": "[variables('vnetSubnetId')]"
                                                 },
+                                                "applicationSecurityGroups": [
+                                                    {
+                                                        "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
+                                                    }
+                                                ],
                                                 "loadBalancerBackendAddressPools": [
                                                     {
                                                         "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', variables('loadBalancerName'), '/backendAddressPools/', variables('loadBalancerBackEndName'))]"
@@ -110,7 +201,10 @@
                                                 ]
                                             }
                                         }
-                                    ]
+                                    ],
+                                    "networkSecurityGroup": {
+                                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+                                    }
                                 }
                             }
                         ]

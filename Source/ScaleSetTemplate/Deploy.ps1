@@ -10,5 +10,5 @@ $opts = @{
     TemplateParameterFile = (Join-Path -Path $PWD.Path -ChildPath "azuredeploy.parameters.json")
 }
 
-New-AzureRmResourcegroup -Name $ResourceGroupName -Location $ResourceLocation -Verbose
-New-AzureRmResourceGroupDeployment @opts -verbose   
+New-AzResourceGroup -Name $ResourceGroupName -Location $ResourceLocation -Verbose
+New-AzResourceGroupDeployment @opts -verbose   
