@@ -7,8 +7,20 @@ It uses Azure DevOps Pipelines for CI/CD.  The Pipelines are defined in the Pipe
 
 ## PreReq
 * Register for Shared Image Gallery Preview - https://azure.microsoft.com/en-us/blog/announcing-the-public-preview-of-shared-image-gallery/
-* Run .\Scripts\shared_image_setup.sh. 
-    * This will setup the Shared Image Gallery and Image Name.  
+* Run the following to setup a Shared Image Gallery:
+```
+    publisher="bjdazure.demo"
+    gallery="BjdAzureDemoGallery"
+    offer="BaseIISStandard"
+    sku="BaseIIS"
+    replica=1
+    location="southcentralus"
+    RG="Shared_Images_RG"
+
+    az group create -n $RG -l $location
+    az sig create -g $RG --gallery-name $gallery
+    az sig image-definition create -g $RG --gallery-name $gallery --gallery-image-definition $offer --publisher $publisher --offer $offer --sku $sku --os-type Windows 
+```
 
 ## Golden Image 
 * The Golden Image is created from the base Azure Windows 2016 Datacenter Image

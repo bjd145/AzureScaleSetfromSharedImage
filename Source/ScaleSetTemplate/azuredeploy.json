@@ -23,18 +23,21 @@
         },
         "vnetResourceGroupName": {
             "type": "string",
+            "defaultValue": "DevSub01_Vnet_RG",
             "metadata": {
                 "description": "Resource Group Name where Virtual Network lives"
             }         
         },
         "vnetName": {
             "type": "string",
+            "defaultValue": "VNET-001",
             "metadata": {
                 "description": "Name of the Virtual Name"
             }         
         },
         "subnetName": {
             "type": "string",
+            "defaultValue": "AppServers",
             "metadata": {
                 "description": "Name of the subnet in the Vnet to deploy the VMSS"
             }         
