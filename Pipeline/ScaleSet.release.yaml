@@ -39,11 +39,29 @@ steps:
   displayName: 'PowerShell Script - Set Variables'
 
 - task: AzureResourceGroupDeployment@2
-  displayName: 'Azure Deployment - Create VM Scale Set'
+  displayName: 'Azure Deployment - Create VM Scale Set (Basic LB)'
   inputs:
     azureSubscription: 'BJD_APP01_Subscription'
     resourceGroupName: '$(VMSSResourceGroup)'
     location: 'South Central US'
-    csmFile: '$(System.DefaultWorkingDirectory)/Drop/drop/ScaleSetTemplate/azuredeploy.json'
-    csmParametersFile: '$(System.DefaultWorkingDirectory)/Drop/drop/ScaleSetTemplate/azuredeploy.parameters.json'
-    overrideParameters: ' -adminPassword $(managerPassword) -scriptExtensionUri "$(InstallScriptUri)" -vmsharedImageId $(SharedImageResourceId)'
+    csmFile: '$(System.DefaultWorkingDirectory)/Drop/drop/ScaleSetTemplate/azuredeploy-basic-lb.json'
+    overrideParameters: ' -adminPassword $(managerPassword) -scriptExtensionUri "$(InstallScriptUri)" -vmsharedImageId $(SharedImageResourceId) -vmssName bjdspt001 -subnetName Servers'
+  enabled: false
+
+- task: AzureResourceGroupDeployment@2
+  displayName: 'Azure Deployment - Create VM Scale Set (NAT Gateway for Std LB) '
+  inputs:
+    azureSubscription: 'BJD_APP01_Subscription'
+    resourceGroupName: '$(VNetResourceGroup)'
+    location: 'South Central US'
+    csmFile: '$(System.DefaultWorkingDirectory)/Drop/drop/ScaleSetTemplate/azuredeploy-nat.json'
+    overrideParameters: '-vnetResourceGroupName $(VNetResourceGroup) -vnetName $(VnetName) -subnetName $(SubnetName) '
+
+- task: AzureResourceGroupDeployment@2
+  displayName: 'Azure Deployment - Create VM Scale Set (Std LB) '
+  inputs:
+    azureSubscription: 'BJD_APP01_Subscription'
+    resourceGroupName: '$(VMSSResourceGroup)'
+    location: 'South Central US'
+    csmFile: '$(System.DefaultWorkingDirectory)/Drop/drop/ScaleSetTemplate/azuredeploy-standard-lb.json'
+    overrideParameters: ' -adminPassword $(managerPassword) -scriptExtensionUri "$(InstallScriptUri)" -vmsharedImageId $(SharedImageResourceId) -vmssName bjdspt001 -vnetResourceGroupName $(VNetResourceGroup) -vnetName $(VnetName) -subnetName $(SubnetName) '

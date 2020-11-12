@@ -1,0 +1,251 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vmssName": {
+            "type": "string",
+            "metadata": {
+                "description": "String used as a base for naming resources. Must be 3-61 characters in length and globally unique across Azure. A hash is prepended to this string for some resources, and resource-specific information is appended."
+            },
+            "maxLength": 61
+        },
+        "vmsharedImageId": {
+            "type": "string",
+            "metadata": {
+                "descritpion": "Location of the Shared Image that will be used for this VM Scale Set"
+            }
+        },
+        "adminPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Administrator password"
+            }
+        },
+        "scriptExtensionUri":  {
+            "type": "string",
+            "metadata": {
+                "description": "Path to Custom Script Extension"
+            }
+        },
+        "vnetResourceGroupName": {
+            "type": "string",
+            "defaultValue": "DevSub01_Network_RG",
+            "metadata": {
+                "description": "Resource Group Name where Virtual Network lives"
+            }         
+        },
+        "vnetName": {
+            "type": "string",
+            "defaultValue": "DevSub01-VNet-001",
+            "metadata": {
+                "description": "Name of the Virtual Name"
+            }         
+        },
+        "subnetName": {
+            "type": "string",
+            "defaultValue": "AppServers",
+            "metadata": {
+                "description": "Name of the subnet in the Vnet to deploy the VMSS"
+            }         
+        }
+    },
+    "variables": {
+        "loadBalancerName": "bjdstdlb001",
+        "loadBalancerFrontEndName": "loadBalancerFrontEnd",
+        "loadBalancerBackEndName": "loadBalancerBackEnd",
+        "loadBalancerProbeName": "loadBalancerHttpProbe",
+        "loadBalancerNatPoolName": "loadBalancerNatPool",
+        "vnetSubnetId": "[concat(subscription().id, '/resourceGroups/', parameters('vnetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('vnetName'), '/subnets/', parameters('subnetName'))]",
+        "vmSku": "Standard_D2s_v3",
+        "adminUsername": "manager",
+        "instances": 2,
+        "scriptName": "post_build_script.ps1",
+        "domainToJoin": "bjd.demo",
+        "domainUsername": "bjd\\manager",
+        "ouPath": "",
+        "domainJoinOptions": "3"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Compute/virtualMachineScaleSets",
+            "name": "[parameters('vmssName')]",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2019-07-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
+            ],
+            "sku": {
+                "name": "[variables('vmSku')]",
+                "capacity": "[variables('instances')]"
+            },
+            "properties": {
+                "overprovision": true,
+                "doNotRunExtensionsOnOverprovisionedVMs": false,
+                "platformFaultDomainCount": 1,
+                "upgradePolicy": {
+                    "mode": "Automatic"
+                },
+                "singlePlacementGroup": false,
+                "virtualMachineProfile": {
+                    "priority": "Spot",
+                    "evictionPolicy": "Deallocate",
+                    "billingProfile": {
+                        "maxPrice": -1
+                    },
+                    "osProfile": {
+                        "computerNamePrefix": "[parameters('vmssName')]",
+                        "adminUsername": "[variables('adminUsername')]",
+                        "adminPassword": "[parameters('adminPassword')]"
+                    },
+                    "storageProfile": {
+                        "imageReference": {
+                            "id": "[parameters('vmsharedImageId')]"
+                        }
+                    },
+                    "extensionProfile": {
+                        "extensions": [
+                            {
+                                "name": "Microsoft.Compute.Extensions",
+                                "properties": {
+                                    "publisher": "Microsoft.Compute",
+                                    "type": "CustomScriptExtension",
+                                    "typeHandlerVersion": "1.2",
+                                    "settings": {
+                                        "fileUris": [ "[parameters('scriptExtensionUri')]" ],
+                                        "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -file ', variables('scriptName'))]"
+                                    }
+                                }
+                            },
+                            {
+                                "name": "Microsoft.Compute.JsonADDomainExtension",
+                                "properties": {
+                                    "publisher": "Microsoft.Compute",
+                                    "type": "JsonADDomainExtension",
+                                    "typeHandlerVersion": "1.3",
+                                    "autoUpgradeMinorVersion": true,
+                                    "settings": {
+                                        "Name": "[variables('domainToJoin')]",
+                                        "User": "[variables('domainUsername')]",
+                                        "OUPath": "[variables('ouPath')]",
+                                        "Options": "[variables('domainJoinOptions')]",
+                                        "Restart": "true"
+                                    },
+                                    "protectedSettings": {
+                                        "Password": "[parameters('adminPassword')]"
+                                    }
+                                }
+                            }
+                        ]
+                    },                   
+                    "networkProfile": {
+                        "networkInterfaceConfigurations": [
+                            {
+                                "name": "nic",
+                                "properties": {
+                                    "primary": "true",
+                                    "ipConfigurations": [
+                                        {
+                                            "name": "ipconfig",
+                                            "properties": {
+                                                "subnet": {
+                                                    "id": "[variables('vnetSubnetId')]"
+                                                },
+                                                "loadBalancerBackendAddressPools": [
+                                                    {
+                                                        "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', variables('loadBalancerName'), '/backendAddressPools/', variables('loadBalancerBackEndName'))]"
+                                                    }
+                                                ],
+                                                "loadBalancerInboundNatPools": [
+                                                    {
+                                                        "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', variables('loadBalancerName'), '/inboundNatPools/', variables('loadBalancerNatPoolName'))]"
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/loadBalancers",
+            "name": "[variables('loadBalancerName')]",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2020-05-01",
+            "dependsOn": [],
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "frontendIPConfigurations": [
+                    {
+                        "name": "[variables('loadBalancerFrontEndName')]",
+                        "properties": {
+                            "primary": true,
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('vnetSubnetId')]"
+                            }
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "[variables('loadBalancerBackendName')]"
+                    }
+                ],
+                "loadBalancingRules": [
+                    {
+                        "name": "roundRobinLBRule",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/frontendIPConfigurations/', variables('loadBalancerFrontEndName'))]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/backendAddressPools/', variables('loadBalancerBackendName'))]"
+                            },
+                            "protocol": "tcp",
+                            "frontendPort": 80,
+                            "backendPort": 80,
+                            "enableFloatingIP": false,
+                            "idleTimeoutInMinutes": 5,
+                            "loadDistribution": "Default",
+                            "disableOutboundSnat": false,
+                            "probe": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/probes/', variables('loadBalancerProbeName'))]"
+                            }
+                        }
+                    }
+                ],
+                "probes": [
+                    {
+                        "name": "[variables('loadBalancerProbeName')]",
+                        "properties": {
+                            "protocol": "tcp",
+                            "port": 80,
+                            "intervalInSeconds": 5,
+                            "numberOfProbes": 2
+                        }
+                    }
+                ],
+                "inboundNatPools": [
+                    {
+                        "name": "[variables('loadBalancerNatPoolName')]",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/frontendIPConfigurations/', variables('loadBalancerFrontEndName'))]"
+                            },
+                            "protocol": "tcp",
+                            "frontendPortRangeStart": 50000,
+                            "frontendPortRangeEnd": 50019,
+                            "backendPort": 3389
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

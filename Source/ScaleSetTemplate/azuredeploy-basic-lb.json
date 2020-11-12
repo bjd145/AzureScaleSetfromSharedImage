@@ -16,21 +16,27 @@
             }
         },
         "adminPassword": {
-            "type": "string",
+            "type": "securestring",
             "metadata": {
                 "description": "Administrator password"
             }
         },
+        "scriptExtensionUri":  {
+            "type": "string",
+            "metadata": {
+                "description": "Path to Custom Script Extension"
+            }
+        },
         "vnetResourceGroupName": {
             "type": "string",
-            "defaultValue": "DevSub01_Vnet_RG",
+            "defaultValue": "DevSub01_Network_RG",
             "metadata": {
                 "description": "Resource Group Name where Virtual Network lives"
             }         
         },
         "vnetName": {
             "type": "string",
-            "defaultValue": "VNET-001",
+            "defaultValue": "DevSub01-VNet-001",
             "metadata": {
                 "description": "Name of the Virtual Name"
             }         
@@ -44,115 +50,29 @@
         }
     },
     "variables": {
-        "loadBalancerName": "bjdvmsslb001",
+        "loadBalancerName": "bjdvmsslb002",
         "loadBalancerFrontEndName": "loadBalancerFrontEnd",
         "loadBalancerBackEndName": "loadBalancerBackEnd",
         "loadBalancerProbeName": "loadBalancerHttpProbe",
         "loadBalancerNatPoolName": "loadBalancerNatPool",
+        "vnetSubnetId": "[concat(subscription().id, '/resourceGroups/', parameters('vnetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('vnetName'), '/subnets/', parameters('subnetName'))]",
         "vmSku": "Standard_F2s_v2",
         "adminUsername": "manager",
-        "asgName": "WebServers",
-        "nsgName": "vmss-nsg-001",
         "instances": 5,
-        "vnetSubnetId": "[concat('/subscriptions/', subscription().id, '/resourceGroups/', parameters('vnetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('vnetName'), '/subnets/', parameters('subnetName'))]",
+        "scriptName": "post_build_script.ps1",
+        "domainToJoin": "bjdazure.demo",
+        "domainUsername": "bjdazure\\manager",
+        "ouPath": "",
+        "domainJoinOptions": "3"
     },
     "resources": [
-        {
-            "apiVersion": "2017-10-01",
-            "type": "Microsoft.Network/applicationSecurityGroups",
-            "name": "[variables('asgName')]",
-            "location": "[resourceGroup().location]",
-            "properties": {}
-        },
-        {
-            "apiVersion": "2017-10-01",
-            "type": "Microsoft.Network/networkSecurityGroups",
-            "name": "[variables('nsgName')]",
-            "location": "[resourceGroup().location]",
-            "dependsOn": [
-                "[concat('Microsoft.Network/applicationSecurityGroups/', variables('asgName'))]"
-            ],
-            "properties": {
-                "securityRules": [
-                    {
-                        "name": "HTTP-80",
-                        "properties": {
-                            "description": "HTTP 80",
-                            "protocol": "Tcp",
-                            "sourcePortRange": "*",
-                            "destinationPortRange": "80",
-                            "sourceAddressPrefix": "Internet",
-                            "destinationApplicationSecurityGroups": [
-                                {
-                                    "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
-                                }
-                            ],
-                            "access": "Allow",
-                            "priority": 100,
-                            "direction": "Inbound"
-                        }
-                    }
-                ]
-            }
-        },
-        {
-            "apiVersion": "2017-10-01",
-            "type": "Microsoft.Network/networkSecurityGroups",
-            "name": "[variables('nsgName')]",
-            "location": "[resourceGroup().location]",
-            "dependsOn": [
-                "[concat('Microsoft.Network/applicationSecurityGroups/', variables('asgName'))]"
-            ],
-            "properties": {
-                "securityRules": [
-                    {
-                        "name": "HTTP-80",
-                        "properties": {
-                            "description": "HTTP 80",
-                            "protocol": "Tcp",
-                            "sourcePortRange": "*",
-                            "destinationPortRange": "80",
-                            "sourceAddressPrefix": "*",
-                            "destinationApplicationSecurityGroups": [
-                                {
-                                    "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
-                                }
-                            ],
-                            "access": "Allow",
-                            "priority": 100,
-                            "direction": "Inbound"
-                        }
-                    },
-                    {
-                        "name": "RDP-3389",
-                        "properties": {
-                            "description": "RDP 3389 80",
-                            "protocol": "Tcp",
-                            "sourcePortRange": "*",
-                            "destinationPortRange": "3389",
-                            "sourceAddressPrefix": "*",
-                            "destinationApplicationSecurityGroups": [
-                                {
-                                    "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
-                                }
-                            ],
-                            "access": "Allow",
-                            "priority": 100,
-                            "direction": "Inbound"
-                        }
-                    }
-                ]
-            }
-        },
         {
             "type": "Microsoft.Compute/virtualMachineScaleSets",
             "name": "[parameters('vmssName')]",
             "location": "[resourceGroup().location]",
             "apiVersion": "2018-10-01",
             "dependsOn": [
-                "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]",
-                "[resourceId('Microsoft.Network/applicationSecurityGroups/', variables('asgName'))]",
-                "[resourceId('Microsoft.Network/networkSecurityGroups/', variables('nsgName'))]"
+                "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
             ],
             "sku": {
                 "name": "[variables('vmSku')]",
@@ -173,7 +93,42 @@
                         "imageReference": {
                             "id": "[parameters('vmsharedImageId')]"
                         }
-                    },                 
+                    },
+                    "extensionProfile": {
+                        "extensions": [
+                            {
+                                "name": "Microsoft.Compute.Extensions",
+                                "properties": {
+                                    "publisher": "Microsoft.Compute",
+                                    "type": "CustomScriptExtension",
+                                    "typeHandlerVersion": "1.2",
+                                    "settings": {
+                                        "fileUris": [ "[parameters('scriptExtensionUri')]" ],
+                                        "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -file ', variables('scriptName'))]"
+                                    }
+                                }
+                            },
+                            {
+                                "name": "Microsoft.Compute.JsonADDomainExtension",
+                                "properties": {
+                                    "publisher": "Microsoft.Compute",
+                                    "type": "JsonADDomainExtension",
+                                    "typeHandlerVersion": "1.3",
+                                    "autoUpgradeMinorVersion": true,
+                                    "settings": {
+                                        "Name": "[variables('domainToJoin')]",
+                                        "User": "[variables('domainUsername')]",
+                                        "OUPath": "[variables('ouPath')]",
+                                        "Options": "[variables('domainJoinOptions')]",
+                                        "Restart": "true"
+                                    },
+                                    "protectedSettings": {
+                                        "Password": "[parameters('adminPassword')]"
+                                    }
+                                }
+                            }
+                        ]
+                    },                   
                     "networkProfile": {
                         "networkInterfaceConfigurations": [
                             {
@@ -187,11 +142,6 @@
                                                 "subnet": {
                                                     "id": "[variables('vnetSubnetId')]"
                                                 },
-                                                "applicationSecurityGroups": [
-                                                    {
-                                                        "id": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('asgName'))]"
-                                                    }
-                                                ],
                                                 "loadBalancerBackendAddressPools": [
                                                     {
                                                         "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', variables('loadBalancerName'), '/backendAddressPools/', variables('loadBalancerBackEndName'))]"
@@ -204,10 +154,7 @@
                                                 ]
                                             }
                                         }
-                                    ],
-                                    "networkSecurityGroup": {
-                                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
-                                    }
+                                    ]
                                 }
                             }
                         ]

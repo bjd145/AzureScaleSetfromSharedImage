@@ -1,0 +1,117 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vnetResourceGroupName": {
+            "type": "string",
+            "defaultValue": "DevSub01_Network_RG",
+            "metadata": {
+                "description": "Resource Group Name where Virtual Network lives"
+            }         
+        },
+        "vnetName": {
+            "type": "string",
+            "defaultValue": "DevSub01-VNet-001",
+            "metadata": {
+                "description": "Name of the Virtual Name"
+            }         
+        },
+        "subnetName": {
+            "type": "string",
+            "defaultValue": "AppServers",
+            "metadata": {
+                "description": "Name of the subnet in the Vnet to deploy the VMSS"
+            }         
+        }
+    },
+    "variables": {
+        "natName": "bjdnat001",
+        "natPublicIpName": "[concat(variables('natName'), '-pip')]",
+        "natPrefixName": "[concat(variables('natName'), '-prefix')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2020-06-01",
+            "name": "[variables('natPublicIpName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static",
+                "idleTimeoutInMinutes": 4
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPPrefixes",
+            "apiVersion": "2020-06-01",
+            "name": "[variables('natPrefixName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "prefixLength": 31,
+                "publicIPAddressVersion": "IPv4"
+            }
+        },
+        {
+            "type": "Microsoft.Network/natGateways",
+            "apiVersion": "2020-06-01",
+            "name": "[variables('natName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('natPublicIpName'))]",
+                "[resourceId('Microsoft.Network/publicIPPrefixes', variables('natPrefixName'))]"
+            ],
+            "properties": {
+                "idleTimeoutInMinutes": 4,
+                "publicIpAddresses": [
+                {
+                    "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('natPublicIpName'))]"
+                }
+                ],
+                "publicIpPrefixes": [
+                {
+                    "id": "[resourceId('Microsoft.Network/publicIPPrefixes', variables('natPrefixName'))]"
+                }
+                ]
+            }
+        },
+        {
+            "apiVersion": "2017-08-01",
+            "name": "apply-nat-to-subnet",
+            "type": "Microsoft.Resources/deployments",
+            "resourceGroup": "[parameters('vnetResourceGroupName')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/natGateways', variables('natName'))]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "resources": [{
+                        "apiVersion": "2018-03-01",
+                        "type": "Microsoft.Network/virtualNetworks/subnets",
+                        "name": "[concat(parameters('vnetName'),'/', parameters('subnetName'))]",
+                        "location": "[resourceGroup().location]",
+                        "properties": {
+                            "addressPrefix": "[reference(resourceId(parameters('vnetResourceGroupName'),'Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('subnetName')), '2018-03-01').addressPrefix]",
+                            "natGateway": {
+                                "id": "[resourceId('Microsoft.Network/natGateways', variables('natName'))]"
+                            },
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled"
+                        }
+                    }]
+                }
+            }
+        }
+    ]
+}
