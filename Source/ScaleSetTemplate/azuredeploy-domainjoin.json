@@ -1,5 +1,5 @@
 {
-    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json",
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
         "vmssName": {
@@ -50,7 +50,7 @@
         }
     },
     "variables": {
-        "loadBalancerName": "bjdvmsslb002",
+        "loadBalancerName": "bjdvmsslb001",
         "loadBalancerFrontEndName": "loadBalancerFrontEnd",
         "loadBalancerBackEndName": "loadBalancerBackEnd",
         "loadBalancerProbeName": "loadBalancerHttpProbe",
@@ -58,10 +58,10 @@
         "vnetSubnetId": "[concat(subscription().id, '/resourceGroups/', parameters('vnetResourceGroupName'), '/providers/Microsoft.Network/virtualNetworks/', parameters('vnetName'), '/subnets/', parameters('subnetName'))]",
         "vmSku": "Standard_F2s_v2",
         "adminUsername": "manager",
-        "instances": 5,
+        "instances": 3,
         "scriptName": "post_build_script.ps1",
-        "domainToJoin": "bjd.demomo",
-        "domainUsername": "bjd\\administrator",
+        "domainToJoin": "bjddemo.demo",
+        "domainUsername": "bjddemo\\manager",
         "ouPath": "",
         "domainJoinOptions": "3"
     },
@@ -70,7 +70,7 @@
             "type": "Microsoft.Compute/virtualMachineScaleSets",
             "name": "[parameters('vmssName')]",
             "location": "[resourceGroup().location]",
-            "apiVersion": "2018-10-01",
+            "apiVersion": "2019-03-01",
             "dependsOn": [
                 "[resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName'))]"
             ],
@@ -93,6 +93,11 @@
                         "imageReference": {
                             "id": "[parameters('vmsharedImageId')]"
                         }
+                    },
+                    "priority": "Spot",
+                    "evictionPolicy": "Deallocate",
+                    "billingProfile": {
+                        "maxPrice": -1
                     },
                     "extensionProfile": {
                         "extensions": [
@@ -166,8 +171,11 @@
             "type": "Microsoft.Network/loadBalancers",
             "name": "[variables('loadBalancerName')]",
             "location": "[resourceGroup().location]",
-            "apiVersion": "2016-06-01",
+            "apiVersion": "2020-06-01",
             "dependsOn": [],
+            "sku": {
+                "name": "Standard"
+            },
             "properties": {
                 "frontendIPConfigurations": [
                     {
@@ -201,6 +209,8 @@
                             "backendPort": 80,
                             "enableFloatingIP": false,
                             "idleTimeoutInMinutes": 5,
+                            "loadDistribution": "Default",
+                            "disableOutboundSnat": false,
                             "probe": {
                                 "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('loadBalancerName')), '/probes/', variables('loadBalancerProbeName'))]"
                             }
